@@ -1,274 +1,307 @@
-<ion-content [fullscreen]="true" class="app-content">
-  <div class="phone-wrapper">
+import { Component, OnInit } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+import { IonicModule } from '@ionic/angular';
 
-    <!-- HEADER -->
-    <div class="app-header">
-      <div class="header-logo">
-        <ion-icon name="flash" class="logo-icon"></ion-icon>
-        <span class="logo-text">BrainFlip</span>
-      </div>
-      <button *ngIf="currentView !== 'home'" class="home-btn" (click)="goHome()">Home</button>
-    </div>
+interface Note {
+  id: string;
+  title: string;
+  content: string;
+  folder: string;
+  createdAt: number;
+  editedAt: number;
+  favorite: boolean;
+}
 
-    <!-- ==================== HOME VIEW ==================== -->
-    <div *ngIf="currentView === 'home'" class="view-container home-view">
-      <div class="welcome-section">
-        <h1 class="welcome-title">Welcome!</h1>
-        <p class="welcome-subtitle">Transform your notes into flashcards</p>
-      </div>
+interface Flashcard {
+  question: string;
+  answer: string;
+}
 
-      <div class="menu-cards">
-        <button class="menu-card card-purple" (click)="setView('new')">
-          <ion-icon name="document-text-outline" class="card-icon"></ion-icon>
-          <div class="card-text">
-            <span class="card-title">New Note</span>
-            <span class="card-sub">Start writing</span>
-          </div>
-        </button>
+@Component({
+  selector: 'app-home',
+  templateUrl: 'home.page.html',
+  styleUrls: ['home.page.scss'],
+  standalone: true,
+  imports: [CommonModule, FormsModule, IonicModule],
+})
+export class HomePage implements OnInit {
 
-        <button class="menu-card card-gray" (click)="setView('notes')">
-          <ion-icon name="folder-outline" class="card-icon"></ion-icon>
-          <div class="card-text">
-            <span class="card-title">My Notes</span>
-            <span class="card-sub">View all notes</span>
-          </div>
-        </button>
+  // ── NAVIGATION ────────────────────────────────────────────
+  currentView: 'home' | 'new' | 'notes' | 'premium' | 'flashcards' = 'home';
 
-        <button class="menu-card card-orange" (click)="setView('premium')">
-          <ion-icon name="people-outline" class="card-icon"></ion-icon>
-          <div class="card-text">
-            <span class="card-title">Premium Features</span>
-            <span class="card-sub">Multiplayer &amp; more</span>
-          </div>
-          <ion-icon name="person-add-outline" class="card-badge-icon"></ion-icon>
-        </button>
-      </div>
+  // ── NEW NOTE FIELDS ────────────────────────────────────────
+  newNoteTitle   = '';
+  newNoteContent = '';
+  newNoteFolder  = 'General';
+  editingNote: Note | null = null;
 
-      <p class="free-label">Free: Up to 20 flashcards per note</p>
-    </div>
+  // ── NOTES LIST ─────────────────────────────────────────────
+  notes: Note[] = [];
+  searchQuery   = '';
+  activeTab     = 'all';
+  sortMode      = 'edited';
 
-    <!-- ==================== NEW NOTE VIEW ==================== -->
-    <div *ngIf="currentView === 'new'" class="view-container new-view">
-      <div class="note-topbar">
-        <button class="icon-btn" (click)="closeNewNote()">
-          <ion-icon name="close"></ion-icon>
-        </button>
-        <div class="note-actions">
-          <button class="action-btn btn-convert" (click)="convertNote()">
-            <ion-icon name="flash-outline"></ion-icon> Convert
-          </button>
-          <button class="action-btn btn-save" (click)="saveNote()">
-            <ion-icon name="save-outline"></ion-icon> Save
-          </button>
-        </div>
-      </div>
+  // ── FOLDERS ────────────────────────────────────────────────
+  folders: string[]  = [];
+  newFolderName      = '';
 
-      <div class="note-form">
-        <div class="form-group" *ngIf="!editingNote">
-          <label>Folder</label>
-          <div class="select-wrapper">
-            <select [(ngModel)]="newNoteFolder" class="styled-select">
-              <option value="General">General</option>
-              <option *ngFor="let f of folders" [value]="f">{{f}}</option>
-            </select>
-            <ion-icon name="chevron-down-outline" class="select-arrow"></ion-icon>
-          </div>
-        </div>
+  // ── FLASHCARDS ─────────────────────────────────────────────
+  activeFlashcards: Flashcard[] = [];
+  currentCardIndex = 0;
+  cardFlipped      = false;
 
-        <div class="form-group">
-          <label>Title</label>
-          <input
-            [(ngModel)]="newNoteTitle"
-            class="styled-input"
-            placeholder="New Note"
-            type="text"
-          />
-        </div>
+  // ── PREMIUM ────────────────────────────────────────────────
+  benefits = [
+    'Unlimited flashcards',
+    'Custom flashcard designs with images',
+    'Advanced hints and explanations',
+    'Multiplayer study sessions',
+    'Streak bonuses and rewards',
+    'No ads, ever',
+  ];
 
-        <div class="form-group">
-          <label>Content</label>
-          <textarea
-            [(ngModel)]="newNoteContent"
-            class="styled-textarea"
-            placeholder="Write your notes here..."
-            rows="10"
-          ></textarea>
-          <div class="tip-box">
-            <p>Tip: Use this format to create flashcards:</p>
-            <p>Biology – The study of life</p>
-            <p>Chemistry – The study of matter</p>
-            <p>Physics – The study of energy</p>
-          </div>
-        </div>
+  // ── TOAST ──────────────────────────────────────────────────
+  toastMessage = '';
+  private toastTimer: any;
 
-        <div class="flashcard-format-box">
-          <p class="ff-title">Flashcard Format</p>
-          <p class="ff-desc">Use the format: <span class="ff-highlight">Answer – Question</span></p>
-          <p class="ff-example">Example: Biology – The study of life</p>
-        </div>
-      </div>
-    </div>
+  // ─────────────────────────────────────────────────────────
+  ngOnInit() {
+    this.loadFromStorage();
+  }
 
-    <!-- ==================== FLASHCARD VIEW ==================== -->
-    <div *ngIf="currentView === 'flashcards'" class="view-container flashcard-view">
-      <div class="note-topbar">
-        <button class="icon-btn" (click)="setView('notes')">
-          <ion-icon name="arrow-back"></ion-icon>
-        </button>
-        <h3 class="fc-view-title">Flashcards</h3>
-      </div>
+  // ── NAVIGATION ────────────────────────────────────────────
+  setView(view: 'home' | 'new' | 'notes' | 'premium' | 'flashcards') {
+    this.currentView = view;
+  }
 
-      <div *ngIf="activeFlashcards.length === 0" class="empty-state">
-        <ion-icon name="albums-outline" class="empty-icon"></ion-icon>
-        <p>No flashcards found. Use "Answer – Question" format in your note.</p>
-      </div>
+  goHome() {
+    this.currentView = 'home';
+    this.editingNote = null;
+    this.resetNewNote();
+  }
 
-      <div *ngIf="activeFlashcards.length > 0" class="flashcard-slider">
-        <p class="fc-counter">{{currentCardIndex + 1}} / {{activeFlashcards.length}}</p>
-        <div class="flashcard" [class.flipped]="cardFlipped" (click)="flipCard()">
-          <div class="card-inner">
-            <div class="card-front">
-              <p class="card-label">Question</p>
-              <p class="card-content-text">{{activeFlashcards[currentCardIndex]?.question}}</p>
-              <p class="card-hint">Tap to reveal answer</p>
-            </div>
-            <div class="card-back">
-              <p class="card-label">Answer</p>
-              <p class="card-content-text">{{activeFlashcards[currentCardIndex]?.answer}}</p>
-            </div>
-          </div>
-        </div>
-        <div class="fc-nav">
-          <button class="fc-nav-btn" (click)="prevCard()" [disabled]="currentCardIndex === 0">
-            <ion-icon name="chevron-back"></ion-icon>
-          </button>
-          <button class="fc-nav-btn" (click)="nextCard()" [disabled]="currentCardIndex === activeFlashcards.length - 1">
-            <ion-icon name="chevron-forward"></ion-icon>
-          </button>
-        </div>
-      </div>
-    </div>
+  // ── NEW NOTE ──────────────────────────────────────────────
+  openNewNote() {
+    this.editingNote = null;
+    this.resetNewNote();
+    this.currentView = 'new';
+  }
 
-    <!-- ==================== NOTES VIEW ==================== -->
-    <div *ngIf="currentView === 'notes'" class="view-container notes-view">
-      <div class="search-bar-wrap">
-        <ion-icon name="search-outline" class="search-icon"></ion-icon>
-        <input [(ngModel)]="searchQuery" class="search-input" placeholder="Search notes..." type="text" />
-      </div>
+  closeNewNote() {
+    this.editingNote = null;
+    this.resetNewNote();
+    this.currentView = 'home';
+  }
 
-      <div class="tabs-row">
-        <button class="tab-btn" [class.active]="activeTab === 'all'" (click)="activeTab = 'all'">All Notes</button>
-        <button class="tab-btn" [class.active]="activeTab === 'General'" (click)="activeTab = 'General'">General</button>
-        <button class="tab-btn icon-tab" [class.active]="activeTab === 'favorites'" (click)="activeTab = 'favorites'">
-          <ion-icon name="star"></ion-icon>
-        </button>
-        <button *ngFor="let f of folders" class="tab-btn" [class.active]="activeTab === f" (click)="activeTab = f">{{f}}</button>
-      </div>
+  resetNewNote() {
+    this.newNoteTitle   = '';
+    this.newNoteContent = '';
+    this.newNoteFolder  = 'General';
+  }
 
-      <div class="folder-add-row">
-        <input [(ngModel)]="newFolderName" class="folder-input" placeholder="Folder name..." type="text" />
-        <button class="folder-add-btn" (click)="addFolder()">Add</button>
-        <button class="folder-cancel-btn" (click)="newFolderName = ''">Cancel</button>
-      </div>
+  saveNote() {
+    const title = this.newNoteTitle.trim() || 'Untitled Note';
 
-      <div class="sort-row">
-        <button class="sort-btn" (click)="sortBy('az')">
-          <ion-icon name="swap-vertical-outline"></ion-icon> A-Z
-        </button>
-        <button class="sort-btn" (click)="sortBy('created')">
-          <ion-icon name="calendar-outline"></ion-icon> Created
-        </button>
-        <button class="sort-btn active-sort" (click)="sortBy('edited')">
-          <ion-icon name="create-outline"></ion-icon> Edited
-        </button>
-      </div>
+    if (this.editingNote) {
+      const idx = this.notes.findIndex(n => n.id === this.editingNote!.id);
+      if (idx !== -1) {
+        this.notes[idx] = {
+          ...this.notes[idx],
+          title,
+          content: this.newNoteContent,
+          folder:  this.newNoteFolder,
+          editedAt: Date.now(),
+        };
+      }
+      this.editingNote = null;
+    } else {
+      const note: Note = {
+        id:        Date.now().toString(),
+        title,
+        content:   this.newNoteContent,
+        folder:    this.newNoteFolder,
+        createdAt: Date.now(),
+        editedAt:  Date.now(),
+        favorite:  false,
+      };
+      this.notes.unshift(note);
+    }
 
-      <div class="notes-list">
-        <div *ngIf="filteredNotes.length === 0" class="empty-state">
-          <ion-icon name="document-outline" class="empty-icon"></ion-icon>
-          <p>No notes yet. Tap + to create one!</p>
-        </div>
+    this.saveToStorage();
+    this.showToast('Note saved!');
+    this.resetNewNote();
+    this.currentView = 'notes';
+  }
 
-        <div *ngFor="let note of filteredNotes" class="note-card">
-          <div class="note-card-header">
-            <span class="note-title">{{note.title}}</span>
-            <button class="delete-btn" (click)="deleteNote(note.id)">
-              <ion-icon name="trash-outline"></ion-icon>
-            </button>
-          </div>
-          <div class="note-card-actions">
-            <button class="note-action-btn btn-edit" (click)="editNote(note)">Edit</button>
-            <button class="note-action-btn btn-flashcards" (click)="viewFlashcards(note)">
-              <ion-icon name="albums-outline"></ion-icon> Flashcards
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+  convertNote() {
+    const cards = this.parseFlashcards(this.newNoteContent);
+    if (cards.length === 0) {
+      this.showToast('No flashcard pairs found. Use "Answer – Question" format.');
+      return;
+    }
+    // Auto-save first
+    const title = this.newNoteTitle.trim() || 'Untitled Note';
+    if (this.editingNote) {
+      const idx = this.notes.findIndex(n => n.id === this.editingNote!.id);
+      if (idx !== -1) {
+        this.notes[idx] = {
+          ...this.notes[idx],
+          title,
+          content:  this.newNoteContent,
+          editedAt: Date.now(),
+        };
+      }
+    } else {
+      this.notes.unshift({
+        id:        Date.now().toString(),
+        title,
+        content:   this.newNoteContent,
+        folder:    this.newNoteFolder,
+        createdAt: Date.now(),
+        editedAt:  Date.now(),
+        favorite:  false,
+      });
+    }
+    this.saveToStorage();
+    this.activeFlashcards = cards;
+    this.currentCardIndex = 0;
+    this.cardFlipped = false;
+    this.resetNewNote();
+    this.editingNote = null;
+    this.currentView = 'flashcards';
+  }
 
-    <!-- ==================== PREMIUM VIEW ==================== -->
-    <div *ngIf="currentView === 'premium'" class="view-container premium-view">
-      <div class="premium-topbar">
-        <button class="icon-btn" (click)="goHome()">
-          <ion-icon name="close"></ion-icon>
-        </button>
-        <div>
-          <h3 class="premium-title-text">Premium Features</h3>
-          <p class="premium-mode-label">Demo Mode</p>
-        </div>
-      </div>
+  // ── NOTES ─────────────────────────────────────────────────
+  editNote(note: Note) {
+    this.editingNote   = note;
+    this.newNoteTitle   = note.title;
+    this.newNoteContent = note.content;
+    this.newNoteFolder  = note.folder;
+    this.currentView = 'new';
+  }
 
-      <div class="premium-hero">
-        <ion-icon name="trophy-outline" class="trophy-icon"></ion-icon>
-        <h2 class="hero-title">Go Premium!</h2>
-        <p class="hero-sub">Unlock unlimited flashcards and multiplayer modes</p>
-        <p class="hero-price">$4.99/month</p>
-      </div>
+  deleteNote(id: string) {
+    this.notes = this.notes.filter(n => n.id !== id);
+    this.saveToStorage();
+    this.showToast('Note deleted.');
+  }
 
-      <div class="feature-grid">
-        <div class="feature-card fc-purple">
-          <ion-icon name="people-outline"></ion-icon>
-          <p class="feat-title">Multiplayer</p>
-          <p class="feat-sub">Study with friends</p>
-        </div>
-        <div class="feature-card fc-blue">
-          <ion-icon name="help-circle-outline"></ion-icon>
-          <p class="feat-title">Multiple Choice</p>
-          <p class="feat-sub">Test your knowledge</p>
-        </div>
-        <div class="feature-card fc-green">
-          <ion-icon name="flash-outline"></ion-icon>
-          <p class="feat-title">Matching Game</p>
-          <p class="feat-sub">Match pairs quickly</p>
-        </div>
-        <div class="feature-card fc-red">
-          <ion-icon name="timer-outline"></ion-icon>
-          <p class="feat-title">Timed Quiz</p>
-          <p class="feat-sub">Beat the clock</p>
-        </div>
-      </div>
+  viewFlashcards(note: Note) {
+    const cards = this.parseFlashcards(note.content);
+    this.activeFlashcards = cards;
+    this.currentCardIndex = 0;
+    this.cardFlipped = false;
+    this.currentView = 'flashcards';
+  }
 
-      <div class="benefits-section">
-        <h4 class="benefits-title">Premium Benefits</h4>
-        <div class="benefit-item" *ngFor="let b of benefits">
-          <span class="benefit-dot"></span>
-          <span>{{b}}</span>
-        </div>
-      </div>
+  get filteredNotes(): Note[] {
+    let result = [...this.notes];
 
-      <button class="upgrade-btn">Upgrade Now</button>
-    </div>
+    // Tab filter
+    if (this.activeTab === 'favorites') {
+      result = result.filter(n => n.favorite);
+    } else if (this.activeTab !== 'all') {
+      result = result.filter(n => n.folder === this.activeTab);
+    }
 
-    <!-- FLOATING ACTION BUTTON -->
-    <button *ngIf="currentView === 'notes'" class="fab-btn" (click)="openNewNote()">
-      <ion-icon name="add"></ion-icon>
-    </button>
+    // Search
+    if (this.searchQuery.trim()) {
+      const q = this.searchQuery.toLowerCase();
+      result = result.filter(n =>
+        n.title.toLowerCase().includes(q) ||
+        n.content.toLowerCase().includes(q)
+      );
+    }
 
-    <!-- TOAST -->
-    <div *ngIf="toastMessage" class="toast-msg">
-      <ion-icon name="checkmark-circle-outline"></ion-icon>
-      {{toastMessage}}
-    </div>
+    // Sort
+    if (this.sortMode === 'az') {
+      result.sort((a, b) => a.title.localeCompare(b.title));
+    } else if (this.sortMode === 'created') {
+      result.sort((a, b) => b.createdAt - a.createdAt);
+    } else {
+      result.sort((a, b) => b.editedAt - a.editedAt);
+    }
 
-  </div>
-</ion-content>
+    return result;
+  }
+
+  sortBy(mode: string) {
+    this.sortMode = mode;
+  }
+
+  // ── FOLDERS ───────────────────────────────────────────────
+  addFolder() {
+    const name = this.newFolderName.trim();
+    if (!name || this.folders.includes(name) || name === 'General') return;
+    this.folders.push(name);
+    this.newFolderName = '';
+    this.saveToStorage();
+  }
+
+  // ── FLASHCARDS ────────────────────────────────────────────
+  parseFlashcards(content: string): Flashcard[] {
+    const lines = content.split('\n').filter(l => l.trim());
+    const cards: Flashcard[] = [];
+    const separators = [' – ', ' - ', ' — ', ': '];
+
+    for (const line of lines) {
+      for (const sep of separators) {
+        const idx = line.indexOf(sep);
+        if (idx !== -1) {
+          const answer = line.substring(0, idx).trim();
+          const question = line.substring(idx + sep.length).trim();
+          if (answer && question) {
+            cards.push({ answer, question });
+            break;
+          }
+        }
+      }
+    }
+    return cards;
+  }
+
+  flipCard() {
+    this.cardFlipped = !this.cardFlipped;
+  }
+
+  nextCard() {
+    if (this.currentCardIndex < this.activeFlashcards.length - 1) {
+      this.cardFlipped = false;
+      setTimeout(() => this.currentCardIndex++, 50);
+    }
+  }
+
+  prevCard() {
+    if (this.currentCardIndex > 0) {
+      this.cardFlipped = false;
+      setTimeout(() => this.currentCardIndex--, 50);
+    }
+  }
+
+  // ── STORAGE ───────────────────────────────────────────────
+  saveToStorage() {
+    localStorage.setItem('brainflip_notes',   JSON.stringify(this.notes));
+    localStorage.setItem('brainflip_folders', JSON.stringify(this.folders));
+  }
+
+  loadFromStorage() {
+    const raw = localStorage.getItem('brainflip_notes');
+    if (raw) {
+      try { this.notes = JSON.parse(raw); } catch { this.notes = []; }
+    }
+    const rawF = localStorage.getItem('brainflip_folders');
+    if (rawF) {
+      try { this.folders = JSON.parse(rawF); } catch { this.folders = []; }
+    }
+  }
+
+  // ── TOAST ─────────────────────────────────────────────────
+  showToast(msg: string) {
+    clearTimeout(this.toastTimer);
+    this.toastMessage = msg;
+    this.toastTimer = setTimeout(() => {
+      this.toastMessage = '';
+    }, 2600);
+  }
+}
